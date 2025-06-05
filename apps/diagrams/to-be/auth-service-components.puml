@@ -1,0 +1,69 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Auth Service - Components Diagram (TO BE)
+
+Person(user, "Пользователь", "Владелец умного дома")
+Container(webApp, "Web Application", "SPA", "Веб-интерфейс")
+Container(apiGateway, "API Gateway", "Nginx", "Единая точка входа")
+
+Container_Boundary(authService, "Auth Service") {
+    Component(authController, "Authentication Controller", "Go/Node.js", "REST API для аутентификации, login/logout")
+    Component(userController, "User Management Controller", "Go/Node.js", "REST API для управления профилем пользователя")
+    Component(subscriptionController, "Subscription Controller", "Go/Node.js", "REST API для управления подписками SaaS")
+    
+    Component(jwtService, "JWT Token Service", "Go/Node.js", "Создание, валидация и управление JWT токенами")
+    Component(passwordService, "Password Service", "Go/Node.js", "Хеширование и проверка паролей")
+    Component(oauthProvider, "OAuth Provider", "Go/Node.js", "Интеграция с Google, Facebook, GitHub OAuth")
+    Component(emailService, "Email Service", "Go/Node.js", "Отправка email для восстановления пароля, верификации")
+    Component(billingService, "Billing Service", "Go/Node.js", "Обработка платежей и биллинг подписок")
+    
+    Component(userRepository, "User Repository", "Go/Node.js", "Доступ к данным пользователей в БД")
+    Component(subscriptionRepository, "Subscription Repository", "Go/Node.js", "Доступ к данным подписок в БД")
+    Component(sessionRepository, "Session Repository", "Go/Node.js", "Управление пользовательскими сессиями")
+}
+
+ContainerDb(userDb, "User Database", "PostgreSQL", "Пользователи, подписки, сессии")
+Container(messageQueue, "Message Queue", "Apache Kafka", "Event streaming")
+System_Ext(emailProvider, "Email Provider", "SendGrid/AWS SES")
+System_Ext(paymentProvider, "Payment Provider", "Stripe/PayPal")
+System_Ext(oauthProviders, "OAuth Providers", "Google, Facebook, GitHub")
+
+' Внешние связи
+Rel(user, webApp, "Использует", "HTTPS")
+Rel(webApp, apiGateway, "API calls", "HTTPS")
+Rel(apiGateway, authController, "Authentication requests", "HTTP/gRPC")
+Rel(apiGateway, userController, "User management", "HTTP/gRPC")
+Rel(apiGateway, subscriptionController, "Subscription management", "HTTP/gRPC")
+
+' Внутренние связи контроллеров
+Rel(authController, jwtService, "Создает/валидирует токены", "")
+Rel(authController, passwordService, "Проверяет пароли", "")
+Rel(authController, oauthProvider, "OAuth аутентификация", "")
+Rel(authController, userRepository, "Получает данные пользователей", "")
+Rel(authController, sessionRepository, "Управляет сессиями", "")
+
+Rel(userController, userRepository, "CRUD операции", "")
+Rel(userController, emailService, "Отправляет уведомления", "")
+Rel(userController, passwordService, "Хеширует новые пароли", "")
+
+Rel(subscriptionController, subscriptionRepository, "CRUD операции", "")
+Rel(subscriptionController, billingService, "Обрабатывает платежи", "")
+Rel(subscriptionController, userRepository, "Связывает с пользователями", "")
+
+' Связи сервисов с внешними системами
+Rel(emailService, emailProvider, "Отправляет email", "SMTP/API")
+Rel(billingService, paymentProvider, "Обрабатывает платежи", "HTTPS API")
+Rel(oauthProvider, oauthProviders, "OAuth flow", "HTTPS")
+
+' Связи с базой данных
+Rel(userRepository, userDb, "Users table", "SQL")
+Rel(subscriptionRepository, userDb, "Subscriptions table", "SQL")
+Rel(sessionRepository, userDb, "Sessions table", "SQL")
+
+' Event streaming
+Rel(authController, messageQueue, "События аутентификации", "Kafka")
+Rel(userController, messageQueue, "События пользователя", "Kafka")
+Rel(subscriptionController, messageQueue, "События подписки", "Kafka")
+
+@enduml 

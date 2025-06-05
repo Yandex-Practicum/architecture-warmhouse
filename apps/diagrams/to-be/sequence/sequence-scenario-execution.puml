@@ -1,0 +1,167 @@
+@startuml
+!theme plain
+title Последовательность выполнения сценария автоматизации (TO BE)
+
+autonumber
+participant "Message Queue" as MQ
+participant "Scenario Service" as ScenarioService
+participant "Scenario Controller" as ScenarioCtrl
+participant "Rule Engine" as RuleEngine
+participant "Action Executor" as ActionExecutor
+participant "Scenario Repository" as ScenarioRepo
+participant "Execution Repository" as ExecutionRepo
+participant "Scenario Database" as ScenarioDB
+participant "Device Service" as DeviceService
+participant "Notification Service" as NotificationService
+participant "Telemetry Service" as TelemetryService
+participant "Real-time Queue" as RTQ
+participant "Web App" as WebApp
+actor Пользователь as User
+
+== Trigger сценария от телеметрии ==
+
+MQ -> ScenarioService: Event: "scenario.triggered"\n{scenarioId: 456, trigger: "LOW_TEMP", deviceId: 123, value: 18.5}
+ScenarioService -> ScenarioCtrl: processScenarioTrigger(scenarioId, triggerData)
+
+ScenarioCtrl -> ScenarioRepo: findById(scenarioId: 456)
+ScenarioRepo -> ScenarioDB: SELECT * FROM scenarios\nWHERE id = 456 AND active = true
+ScenarioDB --> ScenarioRepo: Scenario data or null
+ScenarioRepo --> ScenarioCtrl: Scenario object or null
+
+alt Сценарий не найден или неактивен
+    ScenarioCtrl --> ScenarioService: {success: false, error: "Scenario not found or inactive"}
+    ScenarioService -> MQ: publishEvent("scenario.failed", {scenarioId, error: "Not found"})
+    MQ --> ScenarioService: Event published
+else Сценарий найден и активен
+    ScenarioCtrl -> ExecutionRepo: createExecution(scenarioId, trigger, status: "STARTED")
+    ExecutionRepo -> ScenarioDB: INSERT INTO scenario_executions\n(scenario_id, trigger_data, status, started_at)
+    ScenarioDB --> ExecutionRepo: Execution created
+    ExecutionRepo --> ScenarioCtrl: Execution object with ID
+    
+    ScenarioCtrl -> RuleEngine: evaluateConditions(scenario, triggerData)
+    
+    == Вычисление условий сценария ==
+    
+    RuleEngine -> RuleEngine: Парсинг условий сценария:\n- IF temperature < 20°C\n- AND time between 18:00-06:00\n- AND heating_mode = "auto"
+    
+    RuleEngine -> TelemetryService: getCurrentTemperature(deviceId: 123)
+    TelemetryService --> RuleEngine: {temperature: 18.5, timestamp}
+    
+    RuleEngine -> RuleEngine: Проверка времени:\n- Текущее время: 22:30\n- В диапазоне 18:00-06:00: ✓
+    
+    RuleEngine -> DeviceService: getDeviceState(heatingDeviceId: 456)
+    DeviceService --> RuleEngine: {mode: "auto", status: "ON"}
+    
+    RuleEngine -> RuleEngine: Вычисление результата:\n- temperature (18.5) < 20: ✓\n- time in range: ✓\n- mode = "auto": ✓\n→ Все условия выполнены
+    
+    RuleEngine --> ScenarioCtrl: {conditionsMet: true, details: {...}}
+    
+    alt Условия не выполнены
+        ScenarioCtrl -> ExecutionRepo: updateExecution(executionId, status: "SKIPPED", reason: "Conditions not met")
+        ExecutionRepo -> ScenarioDB: UPDATE scenario_executions\nSET status = 'SKIPPED', completed_at = NOW()
+        ScenarioDB --> ExecutionRepo: Updated
+        ExecutionRepo --> ScenarioCtrl: Success
+        
+        ScenarioCtrl --> ScenarioService: {success: true, result: "SKIPPED"}
+        ScenarioService -> MQ: publishEvent("scenario.skipped", {scenarioId, executionId, reason})
+        MQ --> ScenarioService: Event published
+        
+    else Условия выполнены - выполняем действия
+        ScenarioCtrl -> ActionExecutor: executeActions(scenario.actions, context)
+        
+        == Выполнение действий сценария ==
+        
+        ActionExecutor -> ActionExecutor: Парсинг действий:\n1. Увеличить температуру на радиаторе на 2°C\n2. Отправить уведомление пользователю\n3. Включить дополнительный обогреватель
+        
+        loop Для каждого действия
+            alt Действие: Увеличить температуру радиатора
+                ActionExecutor -> DeviceService: sendCommand(deviceId: 456, action: "INCREASE_TEMP", value: 2)
+                DeviceService -> DeviceService: Выполнение команды управления устройством
+                DeviceService --> ActionExecutor: {success: true, newTemperature: 22}
+                
+            else Действие: Отправить уведомление
+                ActionExecutor -> NotificationService: sendNotification(userId, type: "SCENARIO_EXECUTED", message: "Включено дополнительное отопление")
+                NotificationService --> ActionExecutor: {success: true, notificationId}
+                
+            else Действие: Включить обогреватель
+                ActionExecutor -> DeviceService: sendCommand(deviceId: 789, action: "TURN_ON")
+                DeviceService --> ActionExecutor: {success: true, deviceStatus: "ON"}
+            end
+        end
+        
+        ActionExecutor -> ActionExecutor: Сбор результатов выполнения:\n- Радиатор: успешно (22°C)\n- Уведомление: отправлено\n- Обогреватель: включен
+        
+        ActionExecutor --> ScenarioCtrl: {success: true, executedActions: 3, results: [...]}
+        
+        ScenarioCtrl -> ExecutionRepo: updateExecution(executionId, status: "COMPLETED", results: executionResults)
+        ExecutionRepo -> ScenarioDB: UPDATE scenario_executions\nSET status = 'COMPLETED', results = '...', completed_at = NOW()
+        ScenarioDB --> ExecutionRepo: Updated
+        ExecutionRepo --> ScenarioCtrl: Success
+        
+        ScenarioCtrl -> ScenarioRepo: updateScenarioStats(scenarioId, lastExecuted: NOW(), executionCount++)
+        ScenarioRepo -> ScenarioDB: UPDATE scenarios\nSET last_executed = NOW(), execution_count = execution_count + 1
+        ScenarioDB --> ScenarioRepo: Updated
+        ScenarioRepo --> ScenarioCtrl: Success
+        
+        ScenarioCtrl --> ScenarioService: {success: true, result: "COMPLETED", executedActions: 3}
+    end
+end
+
+== Публикация результатов ==
+
+ScenarioService -> MQ: publishEvent("scenario.completed", {scenarioId, executionId, results})
+MQ --> ScenarioService: Event published
+
+ScenarioService -> RTQ: publish("scenario.456.status", {status: "COMPLETED", executedAt, actions: 3})
+RTQ --> ScenarioService: Published
+
+== Real-time обновление пользовательского интерфейса ==
+
+note over RTQ, WebApp: WebSocket соединение активно
+RTQ -> WebApp: WebSocket message\n{type: "SCENARIO_EXECUTED", scenarioId: 456, name: "Подогрев при низкой температуре"}
+WebApp -> WebApp: Обновить страницу сценариев\nс отметкой о выполнении
+WebApp --> User: Уведомление: "Сценарий выполнен: Включено дополнительное отопление"
+
+== Ручное выполнение сценария пользователем ==
+
+User -> WebApp: Нажать "Выполнить сценарий"
+WebApp -> ScenarioService: POST /scenarios/456/execute\nAuthorization: Bearer <token>
+ScenarioService -> ScenarioCtrl: executeScenario(scenarioId: 456, triggeredBy: "USER", userId: 123)
+
+ScenarioCtrl -> ScenarioRepo: findById(scenarioId: 456)
+ScenarioRepo -> ScenarioDB: SELECT * FROM scenarios\nWHERE id = 456 AND user_id = 123
+ScenarioDB --> ScenarioRepo: Scenario data
+ScenarioRepo --> ScenarioCtrl: Scenario object
+
+ScenarioCtrl -> ExecutionRepo: createExecution(scenarioId, trigger: "MANUAL", userId: 123)
+ExecutionRepo -> ScenarioDB: INSERT INTO scenario_executions\n(scenario_id, triggered_by, user_id, status, started_at)
+ScenarioDB --> ExecutionRepo: Manual execution created
+ExecutionRepo --> ScenarioCtrl: Execution object
+
+note right: Ручное выполнение пропускает проверку условий
+ScenarioCtrl -> ActionExecutor: executeActions(scenario.actions, manualContext)
+
+ActionExecutor -> ActionExecutor: Выполнение всех действий\nбез проверки условий
+ActionExecutor --> ScenarioCtrl: {success: true, executedActions: 3}
+
+ScenarioCtrl -> ExecutionRepo: updateExecution(executionId, status: "COMPLETED")
+ExecutionRepo -> ScenarioDB: UPDATE scenario_executions\nSET status = 'COMPLETED', completed_at = NOW()
+ScenarioDB --> ExecutionRepo: Updated
+
+ScenarioCtrl --> ScenarioService: {success: true, executionId, message: "Scenario executed manually"}
+ScenarioService --> WebApp: HTTP 200 OK\n{executionId, status: "COMPLETED"}
+WebApp --> User: "Сценарий выполнен успешно"
+
+== Мониторинг выполнения сценариев ==
+
+User -> WebApp: Открыть историю выполнения
+WebApp -> ScenarioService: GET /scenarios/456/executions?limit=10\nAuthorization: Bearer <token>
+ScenarioService -> ExecutionRepo: findByScenarioId(scenarioId: 456, userId: 123, limit: 10)
+ExecutionRepo -> ScenarioDB: SELECT * FROM scenario_executions\nWHERE scenario_id = 456 AND user_id = 123\nORDER BY started_at DESC LIMIT 10
+ScenarioDB --> ExecutionRepo: Execution history
+ExecutionRepo --> ScenarioService: Executions array
+
+ScenarioService --> WebApp: HTTP 200 OK\n{executions: [...]}
+WebApp --> User: Отображение истории:\n- 22:30 - Выполнен автоматически\n- 21:15 - Выполнен вручную\n- 20:45 - Пропущен (условия не выполнены)
+
+@enduml 

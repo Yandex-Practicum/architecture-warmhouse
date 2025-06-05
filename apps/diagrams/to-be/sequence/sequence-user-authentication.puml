@@ -1,0 +1,111 @@
+@startuml
+!theme plain
+title Последовательность аутентификации пользователя (TO BE)
+
+actor Пользователь as User
+autonumber
+participant "Web App" as WebApp
+participant "API Gateway" as Gateway
+participant "Auth Controller" as AuthCtrl
+participant "Password Service" as PwdService
+participant "JWT Service" as JWTService
+participant "User Repository" as UserRepo
+participant "Session Repository" as SessionRepo
+participant "User Database" as UserDB
+participant "Message Queue" as MQ
+
+== Аутентификация по логину и паролю ==
+
+User -> WebApp: Ввод логина/пароля
+WebApp -> Gateway: POST /auth/login\n{email, password}
+Gateway -> AuthCtrl: HTTP Request\nAuthenticate user
+
+AuthCtrl -> UserRepo: findByEmail(email)
+UserRepo -> UserDB: SELECT * FROM users\nWHERE email = ?
+UserDB --> UserRepo: User data or null
+UserRepo --> AuthCtrl: User object or null
+
+alt Пользователь не найден
+    AuthCtrl --> Gateway: 401 Unauthorized\n{error: "Invalid credentials"}
+    Gateway --> WebApp: HTTP 401
+    WebApp --> User: Ошибка входа
+else Пользователь найден
+    AuthCtrl -> PwdService: validatePassword(inputPassword, hashedPassword)
+    PwdService --> AuthCtrl: isValid (boolean)
+    
+    alt Неверный пароль
+        AuthCtrl --> Gateway: 401 Unauthorized\n{error: "Invalid credentials"}
+        Gateway --> WebApp: HTTP 401
+        WebApp --> User: Ошибка входа
+    else Пароль верный
+        AuthCtrl -> JWTService: generateAccessToken(userId, userRole)
+        JWTService --> AuthCtrl: accessToken (JWT)
+        
+        AuthCtrl -> JWTService: generateRefreshToken(userId)
+        JWTService --> AuthCtrl: refreshToken
+        
+        AuthCtrl -> SessionRepo: createSession(userId, refreshToken, expiresAt)
+        SessionRepo -> UserDB: INSERT INTO sessions\n(user_id, refresh_token, expires_at)
+        UserDB --> SessionRepo: Session created
+        SessionRepo --> AuthCtrl: Session object
+        
+        AuthCtrl -> MQ: publishEvent("user.authenticated", {userId, timestamp})
+        MQ --> AuthCtrl: Event published
+        
+        AuthCtrl --> Gateway: 200 OK\n{accessToken, refreshToken, user}
+        Gateway --> WebApp: HTTP 200 + Tokens
+        WebApp -> WebApp: Сохранить токены в localStorage
+        WebApp --> User: Успешный вход
+    end
+end
+
+== Валидация токена для защищенных запросов ==
+
+User -> WebApp: Действие требующее авторизации
+WebApp -> Gateway: GET /devices\nAuthorization: Bearer <accessToken>
+Gateway -> Gateway: Извлечь токен из заголовка
+Gateway -> AuthCtrl: validateToken(accessToken)
+AuthCtrl -> JWTService: verifyToken(accessToken)
+JWTService --> AuthCtrl: {valid: true, userId, role} or {valid: false}
+
+alt Токен невалидный или истек
+    AuthCtrl --> Gateway: 401 Unauthorized\n{error: "Invalid token"}
+    Gateway --> WebApp: HTTP 401
+    WebApp -> WebApp: Удалить токены
+    WebApp --> User: Перенаправление на страницу входа
+else Токен валидный
+    Gateway -> Gateway: Добавить userId в context
+    Gateway -> "Device Service": GET /devices\nX-User-Id: userId
+    note right: Продолжение запроса к целевому сервису
+end
+
+== Обновление токена ==
+
+WebApp -> Gateway: POST /auth/refresh\n{refreshToken}
+Gateway -> AuthCtrl: Refresh access token
+
+AuthCtrl -> SessionRepo: findByRefreshToken(refreshToken)
+SessionRepo -> UserDB: SELECT * FROM sessions\nWHERE refresh_token = ?
+UserDB --> SessionRepo: Session data or null
+SessionRepo --> AuthCtrl: Session object or null
+
+alt Сессия не найдена или истекла
+    AuthCtrl --> Gateway: 401 Unauthorized\n{error: "Invalid refresh token"}
+    Gateway --> WebApp: HTTP 401
+    WebApp -> WebApp: Удалить токены
+    WebApp --> User: Перенаправление на страницу входа
+else Сессия валидная
+    AuthCtrl -> JWTService: generateAccessToken(userId, userRole)
+    JWTService --> AuthCtrl: newAccessToken
+    
+    AuthCtrl -> SessionRepo: updateLastUsed(sessionId)
+    SessionRepo -> UserDB: UPDATE sessions\nSET last_used = NOW()
+    UserDB --> SessionRepo: Updated
+    SessionRepo --> AuthCtrl: Success
+    
+    AuthCtrl --> Gateway: 200 OK\n{accessToken}
+    Gateway --> WebApp: HTTP 200 + New token
+    WebApp -> WebApp: Обновить токен в localStorage
+end
+
+@enduml 

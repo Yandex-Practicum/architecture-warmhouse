@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title Smart Home - Context Diagram (TO BE)
+
+Person(homeowner, "Пользователь", "Владелец умного дома, самостоятельно управляет устройствами, настраивает сценарии и просматривает телеметрию")
+
+System(smartHomePlatform, "Smart Home", "Система управления отоплением и мониторинга температуры")
+
+System_Ext(webApp, "Веб-приложение", "Веб-интерфейс для управления умным домом")
+
+System_Ext(sensors, "Датчики", "Физические устройства, установленные в помещениях дома: датчики температуры и т.д.")
+System_Ext(heatingDevices, "Системы отопления", "Физические устройства отопления: котлы, радиаторы, термостаты")
+
+System_Ext(partnerEcosystem, "Партнерская экосистема", "API и SDK партнеров для интеграции устройств по стандартным протоколам")
+
+' Взаимодействие пользователя
+Rel(homeowner, webApp, "Управляет умным домом")
+Rel(webApp, smartHomePlatform, "REST API / WebSocket", "HTTPS/WSS")
+
+' Взаимодействие с устройствами (самостоятельное подключение)
+Rel(homeowner, sensors, "Самостоятельно устанавливает и настраивает")
+Rel(homeowner, heatingDevices, "Самостоятельно устанавливает и настраивает")
+
+' Интеграция платформы с устройствами
+Rel(smartHomePlatform, sensors, "Управление и телеметрия", "API устройств")
+Rel(smartHomePlatform, heatingDevices, "Управление и телеметрия", "API устройств")
+
+' Партнерская экосистема
+Rel(smartHomePlatform, partnerEcosystem, "Интеграция устройств", "REST API/SDK")
+Rel(partnerEcosystem, heatingDevices, "Поддерживает устройства")
+
+@enduml 

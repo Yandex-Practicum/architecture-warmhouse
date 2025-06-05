@@ -1,0 +1,80 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Telemetry Service - Components Diagram (TO BE)
+
+Person(user, "Пользователь", "Владелец умного дома")
+Container(webApp, "Web Application", "SPA", "Веб-интерфейс")
+Container(apiGateway, "API Gateway", "Nginx", "Единая точка входа")
+
+Container_Boundary(telemetryService, "Telemetry Service") {
+    Component(telemetryController, "Telemetry Controller", "Go/Node.js", "REST API для получения телеметрических данных")
+    Component(analyticsController, "Analytics Controller", "Go/Node.js", "REST API для аналитики и отчетов")
+    Component(alertsController, "Alerts Controller", "Go/Node.js", "REST API для управления алертами по телеметрии")
+    
+    Component(dataCollector, "Data Collector", "Go/Node.js", "Сбор телеметрических данных от устройств")
+    Component(dataProcessor, "Data Processor", "Go/Node.js", "Обработка и валидация входящих данных")
+    Component(aggregationService, "Aggregation Service", "Go/Node.js", "Агрегация данных по временным интервалам")
+    Component(analyticsEngine, "Analytics Engine", "Go/Node.js", "Анализ трендов, вычисление метрик")
+    Component(alertsEngine, "Alerts Engine", "Go/Node.js", "Обработка алертов и пороговых значений")
+    
+    Component(telemetryRepository, "Telemetry Repository", "Go/Node.js", "Доступ к телеметрическим данным в БД")
+    Component(metricsRepository, "Metrics Repository", "Go/Node.js", "Доступ к агрегированным метрикам")
+    Component(alertsRepository, "Alerts Repository", "Go/Node.js", "Доступ к настройкам и истории алертов")
+}
+
+ContainerDb(telemetryDb, "Telemetry Database", "PostgreSQL", "Телеметрические данные, метрики, алерты")
+Container(messageQueue, "Message Queue", "Apache Kafka", "Event streaming")
+Container(realTimeQueue, "Real-time Queue", "Redis Pub/Sub", "Real-time уведомления")
+Container(timeSeriesDb, "Time Series Database", "InfluxDB", "Высокопроизводительное хранение временных рядов")
+Container_Ext(deviceService, "Device Service", "Go/Node.js", "Источник телеметрии устройств")
+Container_Ext(notificationService, "Notification Service", "Go/Node.js", "Уведомления об алертах")
+
+' Внешние связи
+Rel(user, webApp, "Использует", "HTTPS")
+Rel(webApp, apiGateway, "API calls", "HTTPS")
+Rel(apiGateway, telemetryController, "Получение телеметрии", "HTTP/gRPC")
+Rel(apiGateway, analyticsController, "Аналитика и отчеты", "HTTP/gRPC")
+Rel(apiGateway, alertsController, "Управление алертами", "HTTP/gRPC")
+
+' Внутренние связи контроллеров
+Rel(telemetryController, dataCollector, "Получение данных", "")
+Rel(telemetryController, telemetryRepository, "Чтение телеметрии", "")
+
+Rel(analyticsController, analyticsEngine, "Аналитика", "")
+Rel(analyticsController, metricsRepository, "Получение метрик", "")
+
+Rel(alertsController, alertsEngine, "Управление алертами", "")
+Rel(alertsController, alertsRepository, "CRUD операции", "")
+
+' Связи сервисов
+Rel(dataCollector, dataProcessor, "Обработка данных", "")
+Rel(dataProcessor, aggregationService, "Агрегация", "")
+Rel(dataProcessor, alertsEngine, "Проверка пороговых значений", "")
+
+Rel(aggregationService, analyticsEngine, "Анализ агрегированных данных", "")
+Rel(analyticsEngine, alertsEngine, "Аналитические алерты", "")
+
+' Связи с базами данных
+Rel(telemetryRepository, telemetryDb, "Telemetry table", "SQL")
+Rel(telemetryRepository, timeSeriesDb, "Raw telemetry data", "InfluxQL")
+Rel(metricsRepository, telemetryDb, "Metrics table", "SQL")
+Rel(alertsRepository, telemetryDb, "Alerts table", "SQL")
+
+' Event streaming
+Rel(dataCollector, messageQueue, "События сбора данных", "Kafka")
+Rel(dataProcessor, messageQueue, "События обработки", "Kafka")
+Rel(aggregationService, messageQueue, "События агрегации", "Kafka")
+Rel(alertsEngine, messageQueue, "События алертов", "Kafka")
+Rel(messageQueue, dataCollector, "События от устройств", "Kafka")
+
+' Real-time коммуникация
+Rel(dataProcessor, realTimeQueue, "Real-time данные", "Redis Pub/Sub")
+Rel(alertsEngine, realTimeQueue, "Real-time алерты", "Redis Pub/Sub")
+Rel(analyticsEngine, realTimeQueue, "Real-time аналитика", "Redis Pub/Sub")
+
+' Связи с другими сервисами
+Rel(deviceService, dataCollector, "Телеметрия устройств", "gRPC/HTTP")
+Rel(alertsEngine, notificationService, "Отправка алертов", "gRPC")
+
+@enduml 

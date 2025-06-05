@@ -1,0 +1,145 @@
+@startuml
+!theme plain
+title Последовательность обработки телеметрии (TO BE)
+
+autonumber
+participant "Temperature Sensor" as Sensor
+participant "Telemetry Collector" as Collector
+participant "Telemetry Controller" as TelemetryCtrl
+participant "Telemetry Processor" as TelemetryProc
+participant "Analytics Service" as Analytics
+participant "Alert Service" as AlertService
+participant "Telemetry Repository" as TelemetryRepo
+participant "Device Repository" as DeviceRepo
+participant "Telemetry Database" as TelemetryDB
+participant "Device Database" as DeviceDB
+participant "Message Queue" as MQ
+participant "Real-time Queue" as RTQ
+participant "Cache Service" as Cache
+participant "Web App" as WebApp
+participant "Scenario Service" as ScenarioService
+
+== Сбор телеметрии от датчика ==
+
+Sensor -> Collector: HTTP POST /telemetry\n{deviceId: 123, temperature: 18.5, humidity: 65, timestamp}
+Collector -> Collector: Валидация данных\nи формата сообщения
+
+alt Невалидные данные
+    Collector --> Sensor: HTTP 400 Bad Request\n{error: "Invalid data format"}
+else Данные валидны
+    Collector -> DeviceRepo: findById(deviceId: 123)
+    DeviceRepo -> DeviceDB: SELECT * FROM devices WHERE id = 123
+    DeviceDB --> DeviceRepo: Device data or null
+    DeviceRepo --> Collector: Device object or null
+    
+    alt Устройство не найдено
+        Collector --> Sensor: HTTP 404 Not Found\n{error: "Device not found"}
+    else Устройство найдено
+        Collector -> TelemetryCtrl: processTelemetry(deviceId, telemetryData)
+        
+        TelemetryCtrl -> TelemetryProc: processRawTelemetry(deviceId, data)
+        
+        == Обработка и обогащение данных ==
+        
+        TelemetryProc -> TelemetryProc: Обогащение данных\n(добавление метаданных, калибровка)
+        TelemetryProc -> Analytics: calculateTrends(deviceId, currentTemp: 18.5)
+        Analytics -> TelemetryRepo: getRecentData(deviceId, period: "1h")
+        TelemetryRepo -> TelemetryDB: SELECT * FROM telemetry\nWHERE device_id = 123 AND timestamp > NOW() - INTERVAL '1 hour'
+        TelemetryDB --> TelemetryRepo: Historical data
+        TelemetryRepo --> Analytics: Recent telemetry array
+        
+        Analytics -> Analytics: Расчет тенденций:\n- Средняя температура за час: 19.2°C\n- Тренд: понижение на 0.7°C
+        Analytics --> TelemetryProc: {avgTemp: 19.2, trend: "decreasing", rate: -0.7}
+        
+        == Сохранение данных ==
+        
+        TelemetryProc -> TelemetryRepo: saveTelemetry(enrichedData)
+        TelemetryRepo -> TelemetryDB: INSERT INTO telemetry\n(device_id, temperature, humidity, trends, timestamp)
+        TelemetryDB --> TelemetryRepo: Record saved
+        TelemetryRepo --> TelemetryProc: Success
+        
+        TelemetryProc -> DeviceRepo: updateDeviceStatus(deviceId, lastSeen: NOW(), status: "ONLINE")
+        DeviceRepo -> DeviceDB: UPDATE devices\nSET last_seen = NOW(), status = 'ONLINE'
+        DeviceDB --> DeviceRepo: Updated
+        DeviceRepo --> TelemetryProc: Success
+        
+        == Кэширование для быстрого доступа ==
+        
+        TelemetryProc -> Cache: setCurrent(deviceId, currentState: {temp: 18.5, humidity: 65})
+        Cache --> TelemetryProc: Cached
+        
+        == Публикация событий ==
+        
+        TelemetryProc -> MQ: publishEvent("telemetry.received", {deviceId, data, trends})
+        MQ --> TelemetryProc: Event published
+        
+        TelemetryProc -> RTQ: publish("device.123.telemetry", {temperature: 18.5, humidity: 65, trends})
+        RTQ --> TelemetryProc: Published
+        
+        == Проверка алертов ==
+        
+        TelemetryProc -> AlertService: checkAlerts(deviceId, currentTemp: 18.5)
+        AlertService -> AlertService: Проверка правил:\n- Минимальная температура: 20°C\n- Текущая: 18.5°C → ALERT!
+        
+        alt Найдены алерты
+            AlertService -> MQ: publishEvent("alert.triggered", {deviceId, type: "LOW_TEMPERATURE", value: 18.5, threshold: 20})
+            MQ --> AlertService: Alert event published
+            
+            AlertService -> RTQ: publish("alerts.123", {type: "LOW_TEMPERATURE", message: "Температура ниже нормы"})
+            RTQ --> AlertService: Alert published
+            
+        else Алертов нет
+            note right: Продолжаем без алертов
+        end
+        
+        AlertService --> TelemetryProc: Alert check completed
+        
+        == Trigger сценариев автоматизации ==
+        
+        TelemetryProc -> ScenarioService: checkTriggers(deviceId, telemetryData)
+        ScenarioService -> ScenarioService: Поиск активных сценариев\nс триггером по температуре
+        
+        alt Найдены сценарии для выполнения
+            ScenarioService -> MQ: publishEvent("scenario.triggered", {scenarioId: 456, trigger: "LOW_TEMP", deviceId})
+            MQ --> ScenarioService: Scenario event published
+            note right: Сценарий выполнится асинхронно
+        else Сценариев нет
+            note right: Продолжаем без сценариев
+        end
+        
+        ScenarioService --> TelemetryProc: Scenario check completed
+        
+        TelemetryProc --> TelemetryCtrl: Processing completed successfully
+        TelemetryCtrl --> Collector: Success
+        Collector --> Sensor: HTTP 200 OK\n{status: "processed"}
+    end
+end
+
+== Real-time обновление пользовательского интерфейса ==
+
+note over RTQ, WebApp: WebSocket соединение активно
+RTQ -> WebApp: WebSocket message\n{type: "TELEMETRY_UPDATE", deviceId: 123, temperature: 18.5, humidity: 65}
+WebApp -> WebApp: Обновить dashboard\nс новыми данными
+
+alt Есть алерт
+    RTQ -> WebApp: WebSocket message\n{type: "ALERT", deviceId: 123, message: "Низкая температура"}
+    WebApp -> WebApp: Показать уведомление\nо критической температуре
+end
+
+== Batch обработка для аналитики ==
+
+note over Analytics: Выполняется каждые 5 минут
+Analytics -> TelemetryRepo: getRecentBatch(period: "5m")
+TelemetryRepo -> TelemetryDB: SELECT * FROM telemetry\nWHERE timestamp > NOW() - INTERVAL '5 minutes'
+TelemetryDB --> TelemetryRepo: Batch telemetry data
+TelemetryRepo --> Analytics: Telemetry batch
+
+Analytics -> Analytics: Агрегация данных:\n- Средние значения по комнатам\n- Обнаружение аномалий\n- Прогнозирование потребления
+Analytics -> TelemetryRepo: saveAggregatedData(aggregatedStats)
+TelemetryRepo -> TelemetryDB: INSERT INTO telemetry_aggregated\n(period, room_id, avg_temp, anomalies)
+TelemetryDB --> TelemetryRepo: Aggregated data saved
+
+Analytics -> MQ: publishEvent("analytics.completed", {period, insights})
+MQ --> Analytics: Analytics event published
+
+@enduml 

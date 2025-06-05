@@ -1,0 +1,99 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Integration Service - Components Diagram (TO BE)
+
+Person(user, "Пользователь", "Владелец умного дома")
+Container(webApp, "Web Application", "SPA", "Веб-интерфейс")
+Container(apiGateway, "API Gateway", "Nginx", "Единая точка входа")
+
+Container_Boundary(integrationService, "Integration Service") {
+    Component(integrationController, "Integration Controller", "Go/Node.js", "REST API для управления интеграциями, CRUD операции")
+    Component(connectorController, "Connector Controller", "Go/Node.js", "REST API для управления коннекторами к внешним системам")
+    Component(webhookController, "Webhook Controller", "Go/Node.js", "REST API для обработки входящих вебхуков")
+    Component(syncController, "Sync Controller", "Go/Node.js", "REST API для управления синхронизацией данных")
+    
+    Component(integrationManager, "Integration Manager", "Go/Node.js", "Основная логика управления интеграциями")
+    Component(connectorService, "Connector Service", "Go/Node.js", "Управление коннекторами к внешним системам и API")
+    Component(syncService, "Sync Service", "Go/Node.js", "Синхронизация данных с внешними системами")
+    Component(webhookProcessor, "Webhook Processor", "Go/Node.js", "Обработка входящих вебхуков от внешних систем")
+    Component(cacheService, "Cache Service", "Go/Node.js", "Кэширование данных для повышения производительности")
+    Component(monitoringService, "Monitoring Service", "Go/Node.js", "Мониторинг состояния интеграций и коннекторов")
+    
+    Component(integrationRepository, "Integration Repository", "Go/Node.js", "Доступ к данным интеграций в БД")
+    Component(connectorRepository, "Connector Repository", "Go/Node.js", "Доступ к данным коннекторов и их конфигураций")
+    Component(syncRepository, "Sync Repository", "Go/Node.js", "История синхронизации и статусы операций")
+    Component(cacheRepository, "Cache Repository", "Go/Node.js", "Доступ к кэшированным данным")
+}
+
+ContainerDb(integrationDb, "Integration Database", "PostgreSQL", "Интеграции, коннекторы, синхронизация")
+Container(messageQueue, "Message Queue", "Apache Kafka", "Event streaming")
+Container(realTimeQueue, "Real-time Queue", "Redis Pub/Sub", "Real-time уведомления")
+Container(cacheStore, "Cache Store", "Redis", "Кэш для интеграционных данных")
+System_Ext(externalApis, "External APIs", "Внешние системы и API")
+System_Ext(thirdPartyServices, "Third-party Services", "Сторонние сервисы (Weather API, IoT платформы)")
+Container_Ext(deviceService, "Device Service", "Go/Node.js", "Сервис управления устройствами")
+Container_Ext(telemetryService, "Telemetry Service", "Go/Node.js", "Сервис телеметрии")
+
+' Внешние связи
+Rel(user, webApp, "Использует", "HTTPS")
+Rel(webApp, apiGateway, "API calls", "HTTPS")
+Rel(apiGateway, integrationController, "Управление интеграциями", "HTTP/gRPC")
+Rel(apiGateway, connectorController, "Управление коннекторами", "HTTP/gRPC")
+Rel(apiGateway, webhookController, "Обработка вебхуков", "HTTP/gRPC")
+Rel(apiGateway, syncController, "Управление синхронизацией", "HTTP/gRPC")
+
+' Внутренние связи контроллеров
+Rel(integrationController, integrationManager, "Основные операции", "")
+Rel(integrationController, integrationRepository, "CRUD операции", "")
+
+Rel(connectorController, connectorService, "Управление коннекторами", "")
+Rel(connectorController, connectorRepository, "CRUD операции", "")
+
+Rel(webhookController, webhookProcessor, "Обработка вебхуков", "")
+
+Rel(syncController, syncService, "Управление синхронизацией", "")
+Rel(syncController, syncRepository, "История синхронизации", "")
+
+' Связи сервисов
+Rel(integrationManager, connectorService, "Управление коннекторами", "")
+Rel(integrationManager, syncService, "Запуск синхронизации", "")
+Rel(integrationManager, monitoringService, "Мониторинг интеграций", "")
+
+Rel(connectorService, cacheService, "Кэширование конфигураций", "")
+Rel(connectorService, monitoringService, "Мониторинг коннекторов", "")
+
+Rel(syncService, cacheService, "Кэш синхронизированных данных", "")
+
+Rel(webhookProcessor, syncService, "Инициация синхронизации", "")
+
+Rel(cacheService, cacheRepository, "Управление кэшем", "")
+
+' Связи с базой данных
+Rel(integrationRepository, integrationDb, "Integrations table", "SQL")
+Rel(connectorRepository, integrationDb, "Connectors table", "SQL")
+Rel(syncRepository, integrationDb, "SyncHistory table", "SQL")
+Rel(cacheRepository, cacheStore, "Cached data", "Redis")
+
+' Event streaming
+Rel(integrationManager, messageQueue, "События интеграций", "Kafka")
+Rel(connectorService, messageQueue, "События коннекторов", "Kafka")
+Rel(syncService, messageQueue, "События синхронизации", "Kafka")
+Rel(webhookProcessor, messageQueue, "События вебхуков", "Kafka")
+Rel(monitoringService, messageQueue, "События мониторинга", "Kafka")
+
+' Real-time коммуникация
+Rel(integrationManager, realTimeQueue, "Статусы интеграций", "Redis Pub/Sub")
+Rel(syncService, realTimeQueue, "Статусы синхронизации", "Redis Pub/Sub")
+Rel(monitoringService, realTimeQueue, "Алерты мониторинга", "Redis Pub/Sub")
+
+' Связи с внешними системами
+Rel(connectorService, externalApis, "API вызовы", "HTTP/REST")
+Rel(connectorService, thirdPartyServices, "Интеграция", "HTTP/REST/WebSocket")
+Rel(syncService, externalApis, "Синхронизация данных", "HTTP/REST")
+Rel(webhookProcessor, externalApis, "Получение вебхуков", "HTTP")
+
+' Связи с другими сервисами
+Rel(syncService, telemetryService, "Синхронизация телеметрии", "gRPC")
+
+@enduml 

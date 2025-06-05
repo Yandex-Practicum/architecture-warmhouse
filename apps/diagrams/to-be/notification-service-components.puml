@@ -1,0 +1,89 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Notification Service - Components Diagram (TO BE)
+
+Person(user, "Пользователь", "Владелец умного дома")
+Container(webApp, "Web Application", "SPA", "Веб-интерфейс")
+Container(apiGateway, "API Gateway", "Nginx", "Единая точка входа")
+
+Container_Boundary(notificationService, "Notification Service") {
+    Component(notificationController, "Notification Controller", "Go/Node.js", "REST API для управления уведомлениями, получение истории")
+    Component(emailController, "Email Controller", "Go/Node.js", "REST API для email уведомлений и рассылок")
+    Component(smsController, "SMS Controller", "Go/Node.js", "REST API для SMS алертов и уведомлений")
+    
+    Component(notificationManager, "Notification Manager", "Go/Node.js", "Основная логика управления уведомлениями")
+    Component(emailService, "Email Service", "Go/Node.js", "Отправка email через SMTP провайдеров")
+    Component(smsService, "SMS Service", "Go/Node.js", "Отправка SMS через SMS провайдеров")
+    Component(templateService, "Template Service", "Go/Node.js", "Управление шаблонами уведомлений")
+    Component(subscriptionService, "Subscription Service", "Go/Node.js", "Управление подписками пользователей на уведомления")
+    Component(eventProcessor, "Event Processor", "Go/Node.js", "Обработка событий из Kafka для триггеров уведомлений")
+    
+    Component(notificationRepository, "Notification Repository", "Go/Node.js", "Доступ к истории отправленных уведомлений")
+    Component(templateRepository, "Template Repository", "Go/Node.js", "Доступ к шаблонам уведомлений в БД")
+    Component(subscriptionRepository, "Subscription Repository", "Go/Node.js", "Доступ к подпискам пользователей")
+    Component(deviceTokenRepository, "Device Token Repository", "Go/Node.js", "Доступ к токенам устройств для push")
+}
+
+ContainerDb(notificationDb, "Notification Database", "PostgreSQL", "История уведомлений, шаблоны, подписки")
+Container(messageQueue, "Message Queue", "Apache Kafka", "Event streaming")
+Container(realTimeQueue, "Real-time Queue", "Redis Pub/Sub", "Real-time уведомления")
+System_Ext(emailProvider, "Email Provider", "SendGrid / AWS SES")
+System_Ext(smsProvider, "SMS Provider", "Twilio / AWS SNS")
+Container_Ext(authService, "Auth Service", "Go/Node.js", "Пользовательские данные")
+Container_Ext(telemetryService, "Telemetry Service", "Go/Node.js", "События алертов")
+
+' Внешние связи
+Rel(user, webApp, "Использует", "HTTPS")
+Rel(webApp, apiGateway, "API calls", "HTTPS")
+Rel(apiGateway, notificationController, "Управление уведомлениями", "HTTP/gRPC")
+Rel(apiGateway, emailController, "Email уведомления", "HTTP/gRPC")
+Rel(apiGateway, smsController, "SMS уведомления", "HTTP/gRPC")
+
+' Внутренние связи контроллеров
+Rel(notificationController, notificationManager, "Основные операции", "")
+Rel(notificationController, notificationRepository, "История уведомлений", "")
+Rel(notificationController, subscriptionService, "Управление подписками", "")
+
+Rel(emailController, emailService, "Отправка email", "")
+Rel(emailController, templateService, "Шаблоны email", "")
+
+Rel(smsController, smsService, "Отправка SMS", "")
+Rel(smsController, templateService, "Шаблоны SMS", "")
+
+' Связи сервисов
+Rel(notificationManager, emailService, "Email уведомления", "")
+Rel(notificationManager, smsService, "SMS уведомления", "")
+Rel(notificationManager, templateService, "Получение шаблонов", "")
+Rel(notificationManager, subscriptionService, "Проверка подписок", "")
+
+Rel(eventProcessor, notificationManager, "Триггер уведомлений", "")
+
+Rel(templateService, templateRepository, "CRUD шаблонов", "")
+Rel(subscriptionService, subscriptionRepository, "CRUD подписок", "")
+
+' Связи с базой данных
+Rel(notificationRepository, notificationDb, "Notifications table", "SQL")
+Rel(templateRepository, notificationDb, "Templates table", "SQL")
+Rel(subscriptionRepository, notificationDb, "Subscriptions table", "SQL")
+
+' Event streaming
+Rel(messageQueue, eventProcessor, "События от других сервисов", "Kafka")
+Rel(notificationManager, messageQueue, "События уведомлений", "Kafka")
+Rel(emailService, messageQueue, "События email", "Kafka")
+Rel(smsService, messageQueue, "События SMS", "Kafka")
+
+' Real-time коммуникация
+Rel(notificationManager, realTimeQueue, "Real-time уведомления", "Redis Pub/Sub")
+Rel(emailService, realTimeQueue, "Email статусы", "Redis Pub/Sub")
+Rel(smsService, realTimeQueue, "SMS статусы", "Redis Pub/Sub")
+
+' Связи с внешними провайдерами
+Rel(emailService, emailProvider, "Отправка email", "SMTP/API")
+Rel(smsService, smsProvider, "Отправка SMS", "HTTPS API")
+
+' Связи с другими сервисами
+Rel(authService, subscriptionService, "Данные пользователей", "gRPC")
+Rel(telemetryService, eventProcessor, "События алертов", "Kafka")
+
+@enduml 
