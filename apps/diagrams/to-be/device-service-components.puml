@@ -1,0 +1,87 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Device Service - Components Diagram (TO BE)
+
+Person(user, "Пользователь", "Владелец умного дома")
+Container(webApp, "Web Application", "SPA", "Веб-интерфейс")
+Container(apiGateway, "API Gateway", "Nginx", "Единая точка входа")
+
+Container_Boundary(deviceService, "Device Service") {
+    Component(deviceController, "Device Controller", "Go/Node.js", "REST API для управления устройствами, CRUD операции")
+    Component(sensorController, "Sensor Controller", "Go/Node.js", "REST API для управления датчиками температуры")
+    Component(heatingController, "Heating Controller", "Go/Node.js", "REST API для управления системами отопления")
+    Component(commandController, "Command Controller", "Go/Node.js", "REST API для отправки команд устройствам")
+    
+    Component(deviceManager, "Device Manager", "Go/Node.js", "Основная логика управления устройствами")
+    Component(sensorService, "Sensor Service", "Go/Node.js", "Обработка данных датчиков температуры")
+    Component(heatingService, "Heating Service", "Go/Node.js", "Управление системами отопления, термостатами")
+    Component(commandService, "Command Service", "Go/Node.js", "Очередь и выполнение команд устройствам")
+    Component(telemetryCollector, "Telemetry Collector", "Go/Node.js", "Сбор телеметрии от устройств")
+    
+    Component(deviceRepository, "Device Repository", "Go/Node.js", "Доступ к метаданным устройств в БД")
+    Component(sensorRepository, "Sensor Repository", "Go/Node.js", "Доступ к данным датчиков в БД")
+    Component(heatingRepository, "Heating Repository", "Go/Node.js", "Доступ к данным систем отопления")
+    Component(commandRepository, "Command Repository", "Go/Node.js", "История команд и статусы выполнения")
+}
+
+ContainerDb(deviceDb, "Device Database", "PostgreSQL", "Метаданные устройств, состояния, конфигурации")
+Container(messageQueue, "Message Queue", "Apache Kafka", "Event streaming")
+Container(realTimeQueue, "Real-time Queue", "Redis Pub/Sub", "Real-time уведомления")
+System_Ext(sensors, "Датчики", "Физические датчики температуры")
+System_Ext(heatingDevices, "Системы отопления", "Котлы, радиаторы, термостаты")
+
+' Внешние связи
+Rel(user, webApp, "Использует", "HTTPS")
+Rel(webApp, apiGateway, "API calls", "HTTPS")
+Rel(apiGateway, deviceController, "Управление устройствами", "HTTP/gRPC")
+Rel(apiGateway, sensorController, "Управление датчиками", "HTTP/gRPC")
+Rel(apiGateway, heatingController, "Управление отоплением", "HTTP/gRPC")
+Rel(apiGateway, commandController, "Управление командами", "HTTP/gRPC")
+
+' Внутренние связи контроллеров
+Rel(deviceController, deviceManager, "Основные операции", "")
+Rel(deviceController, deviceRepository, "CRUD операции", "")
+
+Rel(sensorController, sensorService, "Обработка датчиков", "")
+Rel(sensorController, sensorRepository, "CRUD операции", "")
+Rel(sensorController, telemetryCollector, "Сбор данных", "")
+
+Rel(heatingController, heatingService, "Управление отоплением", "")
+Rel(heatingController, heatingRepository, "CRUD операции", "")
+
+Rel(commandController, commandService, "Выполнение команд", "")
+Rel(commandController, commandRepository, "История команд", "")
+
+' Связи сервисов
+Rel(deviceManager, sensorService, "Управление датчиками", "")
+Rel(deviceManager, heatingService, "Управление отоплением", "")
+Rel(deviceManager, telemetryCollector, "Сбор телеметрии", "")
+
+Rel(commandService, deviceManager, "Выполнение команд", "")
+
+' Связи с базой данных
+Rel(deviceRepository, deviceDb, "Devices table", "SQL")
+Rel(sensorRepository, deviceDb, "Sensors table", "SQL")
+Rel(heatingRepository, deviceDb, "HeatingSystems table", "SQL")
+Rel(commandRepository, deviceDb, "Commands table", "SQL")
+
+' Event streaming
+Rel(deviceManager, messageQueue, "События устройств", "Kafka")
+Rel(sensorService, messageQueue, "События датчиков", "Kafka")
+Rel(heatingService, messageQueue, "События отопления", "Kafka")
+Rel(commandService, messageQueue, "События команд", "Kafka")
+Rel(telemetryCollector, messageQueue, "События телеметрии", "Kafka")
+
+' Real-time коммуникация
+Rel(deviceManager, realTimeQueue, "Состояния устройств", "Redis Pub/Sub")
+Rel(sensorService, realTimeQueue, "Данные датчиков", "Redis Pub/Sub")
+Rel(heatingService, realTimeQueue, "Состояния отопления", "Redis Pub/Sub")
+
+' Связи с физическими устройствами
+Rel(sensorService, sensors, "Чтение данных", "API устройств")
+Rel(heatingService, heatingDevices, "Управление", "API устройств")
+Rel(telemetryCollector, sensors, "Сбор телеметрии", "API устройств")
+Rel(telemetryCollector, heatingDevices, "Сбор телеметрии", "API устройств")
+
+@enduml 

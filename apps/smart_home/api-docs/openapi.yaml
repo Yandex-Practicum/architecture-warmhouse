@@ -1,0 +1,402 @@
+openapi: 3.1.0
+info:
+  title: Smart Home Platform API
+  description: |
+    REST API системы умного дома для управления отоплением и мониторинга температуры.
+    
+    Система состоит из микросервисов:
+    - **Device Service** - управление устройствами (датчики, системы отопления)
+    - **Scenario Service** - автоматизация и пользовательские сценарии  
+    - **Telemetry Service** - сбор и анализ телеметрии
+  version: 1.0.0
+  contact:
+    name: Smart Home Platform
+    email: support@smarthome.local
+
+servers:
+  - url: https://api.smarthome.local
+    description: Production server
+  - url: http://localhost:8080
+    description: Development server
+
+security:
+  - bearerAuth: []
+
+paths:
+  # Device Service Endpoints
+  /api/v1/devices:
+    get:
+      tags:
+        - Device Service
+      summary: Получить список всех устройств
+      description: Возвращает список всех устройств пользователя с актуальными данными
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Device'
+              examples:
+                success:
+                  summary: Список устройств
+                  value:
+                    - id: 1
+                      name: "Датчик гостиной"
+                      type: "temperature"
+                      location: "living_room"
+                      value: 22.5
+                      unit: "°C"
+                      status: "active"
+                      last_updated: "2024-01-15T10:30:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/devices/{deviceId}/commands:
+    post:
+      tags:
+        - Device Service
+      summary: Отправить команду устройству
+      description: Отправляет команду управления устройству
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 2
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceCommand'
+            examples:
+              set_temperature:
+                summary: Установить температуру
+                value:
+                  command: "set_temperature"
+                  parameters:
+                    target_temperature: 24.0
+      responses:
+        '200':
+          description: Команда выполнена успешно
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResponse'
+
+  # Scenario Service Endpoints
+  /api/v1/scenarios:
+    post:
+      tags:
+        - Scenario Service
+      summary: Создать новый сценарий
+      description: Создает новый сценарий автоматизации
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScenarioCreate'
+            examples:
+              heating_scenario:
+                summary: Сценарий автоматического отопления
+                value:
+                  name: "Автогрев гостиной"
+                  description: "Включает отопление когда температура ниже 20°C"
+                  enabled: true
+                  trigger:
+                    type: "sensor_threshold"
+                    sensor_id: 1
+                    condition: "less_than"
+                    value: 20.0
+                  actions:
+                    - type: "device_command"
+                      device_id: 2
+                      command: "turn_on"
+      responses:
+        '201':
+          description: Сценарий создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Scenario'
+
+  /api/v1/scenarios/{scenarioId}/activate:
+    put:
+      tags:
+        - Scenario Service
+      summary: Активировать сценарий
+      description: Активирует или деактивирует сценарий автоматизации
+      parameters:
+        - name: scenarioId
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                  example: true
+      responses:
+        '200':
+          description: Статус сценария изменен
+
+  # Telemetry Service Endpoints
+  /api/v1/telemetry/sensors/{sensorId}/data:
+    get:
+      tags:
+        - Telemetry Service
+      summary: Получить данные телеметрии датчика
+      description: Возвращает исторические данные телеметрии
+      parameters:
+        - name: sensorId
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+          example: "2024-01-15T00:00:00Z"
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+          example: "2024-01-15T23:59:59Z"
+      responses:
+        '200':
+          description: Данные телеметрии
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TelemetryData'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Device:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "Датчик гостиной"
+        type:
+          type: string
+          enum: [temperature, heating, humidity]
+          example: "temperature"
+        location:
+          type: string
+          example: "living_room"
+        value:
+          type: number
+          nullable: true
+          example: 22.5
+        unit:
+          type: string
+          example: "°C"
+        status:
+          type: string
+          enum: [active, inactive, error, offline]
+          example: "active"
+        last_updated:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+
+    DeviceCommand:
+      type: object
+      required:
+        - command
+      properties:
+        command:
+          type: string
+          enum: [turn_on, turn_off, set_temperature, get_status]
+          example: "set_temperature"
+        parameters:
+          type: object
+          additionalProperties: true
+          example:
+            target_temperature: 24.0
+
+    CommandResponse:
+      type: object
+      properties:
+        command_id:
+          type: string
+          example: "cmd_abc123"
+        status:
+          type: string
+          enum: [pending, executed, failed]
+          example: "executed"
+        message:
+          type: string
+          example: "Команда выполнена успешно"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:35:00Z"
+
+    Scenario:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        name:
+          type: string
+          example: "Автогрев гостиной"
+        description:
+          type: string
+          example: "Включает отопление когда температура ниже 20°C"
+        enabled:
+          type: boolean
+          example: true
+        trigger:
+          $ref: '#/components/schemas/ScenarioTrigger'
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScenarioAction'
+
+    ScenarioCreate:
+      type: object
+      required:
+        - name
+        - trigger
+        - actions
+      properties:
+        name:
+          type: string
+          example: "Автогрев гостиной"
+        description:
+          type: string
+          example: "Включает отопление когда температура ниже 20°C"
+        enabled:
+          type: boolean
+          default: true
+        trigger:
+          $ref: '#/components/schemas/ScenarioTrigger'
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScenarioAction'
+
+    ScenarioTrigger:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum: [sensor_threshold, time_schedule, device_status]
+          example: "sensor_threshold"
+        sensor_id:
+          type: integer
+          example: 1
+        condition:
+          type: string
+          enum: [equals, less_than, greater_than, between]
+          example: "less_than"
+        value:
+          type: number
+          example: 20.0
+
+    ScenarioAction:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum: [device_command, send_notification]
+          example: "device_command"
+        device_id:
+          type: integer
+          example: 2
+        command:
+          type: string
+          example: "turn_on"
+
+    TelemetryData:
+      type: object
+      properties:
+        sensor_id:
+          type: integer
+          example: 1
+        sensor_name:
+          type: string
+          example: "Датчик гостиной"
+        period:
+          type: object
+          properties:
+            from:
+              type: string
+              format: date-time
+            to:
+              type: string
+              format: date-time
+        data_points:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+                format: date-time
+              value:
+                type: number
+              status:
+                type: string
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Ошибка"
+        code:
+          type: string
+          example: "ERROR_CODE"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+
+  responses:
+    Unauthorized:
+      description: Не авторизован
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+tags:
+  - name: Device Service
+    description: Управление устройствами умного дома
+  - name: Scenario Service  
+    description: Автоматизация и пользовательские сценарии
+  - name: Telemetry Service
+    description: Сбор и анализ телеметрии устройств

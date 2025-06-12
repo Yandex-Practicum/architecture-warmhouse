@@ -1,0 +1,552 @@
+asyncapi: 3.0.0
+info:
+  title: Smart Home Platform Events API
+  version: 1.0.0
+  description: |
+    AsyncAPI спецификация для асинхронного взаимодействия между микросервисами системы умного дома.
+    
+    События передаются через Apache Kafka и используются для:
+    - Уведомлений об изменениях состояния устройств
+    - Передачи данных телеметрии
+    - Активации сценариев автоматизации
+    - Отправки уведомлений пользователям
+  contact:
+    name: Smart Home Platform
+    email: support@smarthome.local
+
+servers:
+  production:
+    host: kafka.smarthome.local:9092
+    protocol: kafka
+    description: Production Kafka cluster
+  development:
+    host: localhost:9092
+    protocol: kafka
+    description: Development Kafka cluster
+
+channels:
+  device/events:
+    description: События устройств (изменения состояния, подключение/отключение)
+    messages:
+      deviceStateChanged:
+        $ref: '#/components/messages/DeviceStateChanged'
+      deviceConnected:
+        $ref: '#/components/messages/DeviceConnected'
+      deviceDisconnected:
+        $ref: '#/components/messages/DeviceDisconnected'
+
+  telemetry/data:
+    description: Данные телеметрии от датчиков
+    messages:
+      sensorData:
+        $ref: '#/components/messages/SensorData'
+      telemetryBatch:
+        $ref: '#/components/messages/TelemetryBatch'
+
+  scenario/events:
+    description: События сценариев (активация, выполнение)
+    messages:
+      scenarioTriggered:
+        $ref: '#/components/messages/ScenarioTriggered'
+      scenarioExecuted:
+        $ref: '#/components/messages/ScenarioExecuted'
+
+  notification/events:
+    description: События уведомлений
+    messages:
+      notificationRequested:
+        $ref: '#/components/messages/NotificationRequested'
+      notificationSent:
+        $ref: '#/components/messages/NotificationSent'
+
+operations:
+  publishDeviceStateChanged:
+    action: send
+    channel:
+      $ref: '#/channels/device~1events'
+    messages:
+      - $ref: '#/channels/device~1events/messages/deviceStateChanged'
+    summary: Публикация события изменения состояния устройства
+    description: Device Service публикует это событие при изменении состояния устройства
+
+  subscribeToDeviceEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/device~1events'
+    summary: Подписка на события устройств
+    description: Scenario Service и Notification Service подписываются на эти события
+
+  publishSensorData:
+    action: send
+    channel:
+      $ref: '#/channels/telemetry~1data'
+    messages:
+      - $ref: '#/channels/telemetry~1data/messages/sensorData'
+    summary: Публикация данных телеметрии
+    description: Device Service публикует данные телеметрии от датчиков
+
+  subscribeToTelemetryData:
+    action: receive
+    channel:
+      $ref: '#/channels/telemetry~1data'
+    summary: Подписка на данные телеметрии
+    description: Telemetry Service подписывается для обработки и сохранения данных
+
+  publishScenarioTriggered:
+    action: send
+    channel:
+      $ref: '#/channels/scenario~1events'
+    messages:
+      - $ref: '#/channels/scenario~1events/messages/scenarioTriggered'
+    summary: Публикация события активации сценария
+    description: Scenario Service публикует при активации сценария
+
+  publishNotificationRequest:
+    action: send
+    channel:
+      $ref: '#/channels/notification~1events'
+    messages:
+      - $ref: '#/channels/notification~1events/messages/notificationRequested'
+    summary: Запрос на отправку уведомления
+    description: Любой сервис может запросить отправку уведомления
+
+components:
+  messages:
+    DeviceStateChanged:
+      name: DeviceStateChanged
+      title: Изменение состояния устройства
+      summary: Событие изменения состояния устройства
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/DeviceStateChangedPayload'
+      examples:
+        - name: TemperatureSensorUpdate
+          summary: Обновление датчика температуры
+          payload:
+            event_id: "evt_001"
+            device_id: 1
+            device_name: "Датчик гостиной"
+            device_type: "temperature"
+            previous_state:
+              value: 21.5
+              status: "active"
+            current_state:
+              value: 22.0
+              status: "active"
+            timestamp: "2024-01-15T10:30:00Z"
+            user_id: 123
+
+    DeviceConnected:
+      name: DeviceConnected
+      title: Подключение устройства
+      summary: Событие подключения устройства к системе
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/DeviceConnectionPayload'
+
+    DeviceDisconnected:
+      name: DeviceDisconnected
+      title: Отключение устройства
+      summary: Событие отключения устройства от системы
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/DeviceConnectionPayload'
+
+    SensorData:
+      name: SensorData
+      title: Данные датчика
+      summary: Телеметрические данные от датчика
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/SensorDataPayload'
+      examples:
+        - name: TemperatureReading
+          summary: Показания температуры
+          payload:
+            sensor_id: 1
+            sensor_name: "Датчик гостиной"
+            sensor_type: "temperature"
+            location: "living_room"
+            value: 22.0
+            unit: "°C"
+            status: "active"
+            timestamp: "2024-01-15T10:30:00Z"
+            user_id: 123
+
+    TelemetryBatch:
+      name: TelemetryBatch
+      title: Пакет данных телеметрии
+      summary: Пакетная передача данных телеметрии
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TelemetryBatchPayload'
+
+    ScenarioTriggered:
+      name: ScenarioTriggered
+      title: Активация сценария
+      summary: Событие активации сценария автоматизации
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ScenarioTriggeredPayload'
+      examples:
+        - name: HeatingScenarioTriggered
+          summary: Активация сценария отопления
+          payload:
+            event_id: "evt_scenario_001"
+            scenario_id: 1
+            scenario_name: "Автогрев гостиной"
+            trigger_type: "sensor_threshold"
+            trigger_data:
+              sensor_id: 1
+              condition: "less_than"
+              threshold: 20.0
+              current_value: 19.5
+            actions:
+              - type: "device_command"
+                device_id: 2
+                command: "turn_on"
+            timestamp: "2024-01-15T10:30:00Z"
+            user_id: 123
+
+    ScenarioExecuted:
+      name: ScenarioExecuted
+      title: Выполнение сценария
+      summary: Событие завершения выполнения сценария
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ScenarioExecutedPayload'
+
+    NotificationRequested:
+      name: NotificationRequested
+      title: Запрос уведомления
+      summary: Запрос на отправку уведомления пользователю
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/NotificationRequestPayload'
+      examples:
+        - name: TemperatureAlert
+          summary: Уведомление о температуре
+          payload:
+            notification_id: "notif_001"
+            user_id: 123
+            type: "warning"
+            title: "Высокая температура"
+            message: "Температура в гостиной превысила 25°C (текущая: 26.2°C)"
+            priority: "high"
+            related_device_id: 1
+            timestamp: "2024-01-15T10:30:00Z"
+
+    NotificationSent:
+      name: NotificationSent
+      title: Уведомление отправлено
+      summary: Подтверждение отправки уведомления
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/NotificationSentPayload'
+
+  schemas:
+    DeviceStateChangedPayload:
+      type: object
+      required:
+        - event_id
+        - device_id
+        - device_name
+        - device_type
+        - current_state
+        - timestamp
+        - user_id
+      properties:
+        event_id:
+          type: string
+          description: Уникальный идентификатор события
+          example: "evt_001"
+        device_id:
+          type: integer
+          description: Идентификатор устройства
+          example: 1
+        device_name:
+          type: string
+          description: Название устройства
+          example: "Датчик гостиной"
+        device_type:
+          type: string
+          enum: [temperature, heating, humidity]
+          description: Тип устройства
+          example: "temperature"
+        previous_state:
+          type: object
+          description: Предыдущее состояние устройства
+          properties:
+            value:
+              type: number
+              nullable: true
+            status:
+              type: string
+        current_state:
+          type: object
+          description: Текущее состояние устройства
+          properties:
+            value:
+              type: number
+              nullable: true
+              example: 22.0
+            status:
+              type: string
+              example: "active"
+        timestamp:
+          type: string
+          format: date-time
+          description: Время события
+          example: "2024-01-15T10:30:00Z"
+        user_id:
+          type: integer
+          description: Идентификатор пользователя
+          example: 123
+
+    DeviceConnectionPayload:
+      type: object
+      required:
+        - event_id
+        - device_id
+        - device_name
+        - device_type
+        - timestamp
+        - user_id
+      properties:
+        event_id:
+          type: string
+          example: "evt_conn_001"
+        device_id:
+          type: integer
+          example: 1
+        device_name:
+          type: string
+          example: "Датчик гостиной"
+        device_type:
+          type: string
+          enum: [temperature, heating, humidity]
+          example: "temperature"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        user_id:
+          type: integer
+          example: 123
+
+    SensorDataPayload:
+      type: object
+      required:
+        - sensor_id
+        - sensor_name
+        - sensor_type
+        - location
+        - value
+        - unit
+        - status
+        - timestamp
+        - user_id
+      properties:
+        sensor_id:
+          type: integer
+          example: 1
+        sensor_name:
+          type: string
+          example: "Датчик гостиной"
+        sensor_type:
+          type: string
+          enum: [temperature, humidity, pressure]
+          example: "temperature"
+        location:
+          type: string
+          example: "living_room"
+        value:
+          type: number
+          example: 22.0
+        unit:
+          type: string
+          example: "°C"
+        status:
+          type: string
+          enum: [active, inactive, error]
+          example: "active"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        user_id:
+          type: integer
+          example: 123
+
+    TelemetryBatchPayload:
+      type: object
+      required:
+        - batch_id
+        - sensors_data
+        - timestamp
+      properties:
+        batch_id:
+          type: string
+          example: "batch_001"
+        sensors_data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SensorDataPayload'
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+
+    ScenarioTriggeredPayload:
+      type: object
+      required:
+        - event_id
+        - scenario_id
+        - scenario_name
+        - trigger_type
+        - trigger_data
+        - actions
+        - timestamp
+        - user_id
+      properties:
+        event_id:
+          type: string
+          example: "evt_scenario_001"
+        scenario_id:
+          type: integer
+          example: 1
+        scenario_name:
+          type: string
+          example: "Автогрев гостиной"
+        trigger_type:
+          type: string
+          enum: [sensor_threshold, time_schedule, device_status]
+          example: "sensor_threshold"
+        trigger_data:
+          type: object
+          description: Данные триггера
+        actions:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [device_command, send_notification]
+              device_id:
+                type: integer
+              command:
+                type: string
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        user_id:
+          type: integer
+          example: 123
+
+    ScenarioExecutedPayload:
+      type: object
+      required:
+        - event_id
+        - scenario_id
+        - execution_status
+        - timestamp
+        - user_id
+      properties:
+        event_id:
+          type: string
+          example: "evt_scenario_exec_001"
+        scenario_id:
+          type: integer
+          example: 1
+        execution_status:
+          type: string
+          enum: [success, failed, partial]
+          example: "success"
+        executed_actions:
+          type: array
+          items:
+            type: object
+            properties:
+              action_type:
+                type: string
+              status:
+                type: string
+              message:
+                type: string
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        user_id:
+          type: integer
+          example: 123
+
+    NotificationRequestPayload:
+      type: object
+      required:
+        - notification_id
+        - user_id
+        - type
+        - title
+        - message
+        - priority
+        - timestamp
+      properties:
+        notification_id:
+          type: string
+          example: "notif_001"
+        user_id:
+          type: integer
+          example: 123
+        type:
+          type: string
+          enum: [info, warning, error, success]
+          example: "warning"
+        title:
+          type: string
+          example: "Высокая температура"
+        message:
+          type: string
+          example: "Температура в гостиной превысила 25°C"
+        priority:
+          type: string
+          enum: [low, normal, high, urgent]
+          example: "high"
+        related_device_id:
+          type: integer
+          nullable: true
+          example: 1
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+
+    NotificationSentPayload:
+      type: object
+      required:
+        - notification_id
+        - user_id
+        - delivery_status
+        - delivery_method
+        - timestamp
+      properties:
+        notification_id:
+          type: string
+          example: "notif_001"
+        user_id:
+          type: integer
+          example: 123
+        delivery_status:
+          type: string
+          enum: [sent, delivered, failed]
+          example: "delivered"
+        delivery_method:
+          type: string
+          enum: [push, email, sms, websocket]
+          example: "push"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z" 

@@ -1,0 +1,123 @@
+@startuml
+!theme plain
+title Последовательность управления устройством (TO BE)
+
+actor Пользователь as User
+autonumber
+participant "Web App" as WebApp
+participant "API Gateway" as Gateway
+participant "Command Controller" as CmdCtrl
+participant "Command Service" as CmdService
+participant "Device Manager" as DeviceManager
+participant "Heating Service" as HeatingService
+participant "Command Repository" as CmdRepo
+participant "Device Repository" as DeviceRepo
+participant "Device Database" as DeviceDB
+participant "Message Queue" as MQ
+participant "Real-time Queue" as RTQ
+participant "Heating Device" as Device
+
+== Отправка команды управления устройством ==
+
+User -> WebApp: Изменить температуру\n(Установить 22°C)
+WebApp -> Gateway: POST /devices/123/commands\nAuthorization: Bearer <token>\n{type: "SET_TEMPERATURE", value: 22}
+Gateway -> Gateway: Валидация токена
+Gateway -> CmdCtrl: Execute command\nUserId: 456, DeviceId: 123
+
+CmdCtrl -> DeviceRepo: findById(deviceId: 123)
+DeviceRepo -> DeviceDB: SELECT * FROM devices\nWHERE id = 123 AND user_id = 456
+DeviceDB --> DeviceRepo: Device data or null
+DeviceRepo --> CmdCtrl: Device object or null
+
+alt Устройство не найдено или не принадлежит пользователю
+    CmdCtrl --> Gateway: 404 Not Found\n{error: "Device not found"}
+    Gateway --> WebApp: HTTP 404
+    WebApp --> User: Ошибка: устройство не найдено
+else Устройство найдено
+    CmdCtrl -> CmdService: executeCommand(deviceId, commandType, value, userId)
+    
+    CmdService -> CmdRepo: createCommand(deviceId, commandType, value, userId, status: "PENDING")
+    CmdRepo -> DeviceDB: INSERT INTO commands\n(device_id, type, value, user_id, status, created_at)
+    DeviceDB --> CmdRepo: Command created
+    CmdRepo --> CmdService: Command object with ID
+    
+    CmdService -> MQ: publishEvent("command.created", {commandId, deviceId, type, value})
+    MQ --> CmdService: Event published
+    
+    CmdService -> DeviceManager: sendCommand(deviceId, commandType, value)
+    DeviceManager -> HeatingService: setTemperature(deviceId: 123, temperature: 22)
+    
+    HeatingService -> Device: HTTP POST /api/control\n{action: "SET_TEMP", value: 22}
+    
+    alt Устройство недоступно или ошибка
+        Device --> HeatingService: HTTP 500 or Timeout
+        HeatingService --> DeviceManager: {success: false, error: "Device unreachable"}
+        DeviceManager --> CmdService: Command failed
+        
+        CmdService -> CmdRepo: updateCommandStatus(commandId, status: "FAILED", error: "Device unreachable")
+        CmdRepo -> DeviceDB: UPDATE commands\nSET status = 'FAILED', error = 'Device unreachable'
+        DeviceDB --> CmdRepo: Updated
+        CmdRepo --> CmdService: Success
+        
+        CmdService -> MQ: publishEvent("command.failed", {commandId, deviceId, error})
+        MQ --> CmdService: Event published
+        
+        CmdService -> RTQ: publish("device.123.status", {status: "OFFLINE", error: "Unreachable"})
+        RTQ --> CmdService: Published
+        
+        CmdService --> CmdCtrl: {success: false, error: "Device unreachable"}
+        CmdCtrl --> Gateway: 422 Unprocessable Entity\n{error: "Device unreachable"}
+        Gateway --> WebApp: HTTP 422
+        WebApp --> User: Ошибка: устройство недоступно
+        
+    else Команда выполнена успешно
+        Device --> HeatingService: HTTP 200\n{status: "OK", currentTemp: 22}
+        HeatingService --> DeviceManager: {success: true, currentTemp: 22}
+        DeviceManager --> CmdService: Command executed successfully
+        
+        CmdService -> CmdRepo: updateCommandStatus(commandId, status: "COMPLETED", response: {currentTemp: 22})
+        CmdRepo -> DeviceDB: UPDATE commands\nSET status = 'COMPLETED', response = '{"currentTemp": 22}'
+        DeviceDB --> CmdRepo: Updated
+        CmdRepo --> CmdService: Success
+        
+        CmdService -> DeviceRepo: updateDeviceState(deviceId, {temperature: 22, lastSeen: NOW()})
+        DeviceRepo -> DeviceDB: UPDATE devices\nSET state = '{"temperature": 22}', last_seen = NOW()
+        DeviceDB --> DeviceRepo: Updated
+        DeviceRepo --> CmdService: Success
+        
+        CmdService -> MQ: publishEvent("command.completed", {commandId, deviceId, result})
+        MQ --> CmdService: Event published
+        
+        CmdService -> RTQ: publish("device.123.status", {temperature: 22, status: "ONLINE"})
+        RTQ --> CmdService: Published
+        
+        CmdService --> CmdCtrl: {success: true, result: {temperature: 22}}
+        CmdCtrl --> Gateway: 200 OK\n{commandId, status: "COMPLETED", result: {temperature: 22}}
+        Gateway --> WebApp: HTTP 200 + Result
+        WebApp --> User: Температура установлена: 22°C
+    end
+end
+
+== Real-time обновление статуса ==
+
+note over RTQ, WebApp: WebSocket соединение активно
+RTQ -> WebApp: WebSocket message\n{type: "DEVICE_UPDATE", deviceId: 123, temperature: 22}
+WebApp -> WebApp: Обновить UI с новым состоянием
+WebApp --> User: Отображение текущей температуры: 22°C
+
+== Мониторинг выполнения команды ==
+
+User -> WebApp: Проверить статус команды
+WebApp -> Gateway: GET /commands/789\nAuthorization: Bearer <token>
+Gateway -> CmdCtrl: Get command status
+
+CmdCtrl -> CmdRepo: findById(commandId: 789, userId: 456)
+CmdRepo -> DeviceDB: SELECT * FROM commands\nWHERE id = 789 AND user_id = 456
+DeviceDB --> CmdRepo: Command data
+CmdRepo --> CmdCtrl: Command object
+
+CmdCtrl --> Gateway: 200 OK\n{commandId: 789, status: "COMPLETED", createdAt, completedAt}
+Gateway --> WebApp: HTTP 200 + Command details
+WebApp --> User: Статус команды: Выполнена
+
+@enduml 

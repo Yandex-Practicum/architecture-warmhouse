@@ -1,0 +1,62 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Smart Home - Containers Diagram (TO BE)
+
+Person(user, "Пользователь", "Владелец умного дома")
+System_Ext(partnerApis, "Partner APIs", "API партнеров для интеграции устройств")
+
+System_Boundary(platform, "Smart Home Platform") {
+    Container(webApp, "Web Application", "SPA", "Веб-интерфейс для управления умным домом")
+    
+    Container(apiGateway, "API Gateway", "Nginx", "Единая точка входа, маршрутизация, аутентификация, rate limiting")
+    
+    Container(authService, "Auth Service", "Go/Node.js", "Управление пользователями, подписки SaaS, аутентификация")
+    Container(deviceService, "Device Service", "Go/Node.js", "Управление всеми типами устройств, команды управления")  
+    Container(scenarioService, "Scenario Service", "Go/Node.js", "Пользовательские сценарии автоматизации, правила")
+    Container(telemetryService, "Telemetry Service", "Go/Node.js", "Сбор, обработка и хранение телеметрии устройств")
+    Container(integrationService, "Integration Service", "Go/Node.js", "Интеграция с партнерскими API и устройствами")
+    Container(notificationService, "Notification Service", "Go/Node.js", "Push-уведомления, email, SMS алерты")
+    
+    ContainerDb(userDb, "User Database", "PostgreSQL", "Пользователи, подписки, биллинг")
+    ContainerDb(deviceDb, "Device Database", "PostgreSQL", "Метаданные устройств, состояния, конфигурации")
+    ContainerDb(telemetryDb, "Telemetry Database", "PostgreSQL", "База данных для хранения телеметрии")
+    ContainerDb(scenarioDb, "Scenario Database", "PostgreSQL", "Сценарии автоматизации, правила")
+    
+    Container(messageQueue, "Message Queue", "Apache Kafka", "Event streaming между микросервисами")
+    Container(realTimeQueue, "Real-time Queue", "Redis Pub/Sub", "Real-time уведомления и WebSocket коммуникация")
+}
+
+' Пользовательские интерфейсы
+Rel(user, webApp, "Использует", "HTTPS")
+Rel(webApp, apiGateway, "API calls", "HTTPS/WSS")
+
+' API Gateway маршрутизация
+Rel(apiGateway, authService, "Маршрутизация запросов", "HTTP/gRPC")
+Rel(apiGateway, deviceService, "Маршрутизация запросов", "HTTP/gRPC")  
+Rel(apiGateway, scenarioService, "Маршрутизация запросов", "HTTP/gRPC")
+Rel(apiGateway, telemetryService, "Маршрутизация запросов", "HTTP/gRPC")
+Rel(apiGateway, notificationService, "Маршрутизация запросов", "HTTP/gRPC")
+
+' Микросервисы и базы данных
+Rel(authService, userDb, "Запись/чтение", "SQL")
+Rel(deviceService, deviceDb, "Запись/чтение", "SQL")
+Rel(telemetryService, telemetryDb, "Запись", "SQL")
+Rel(scenarioService, scenarioDb, "Запись/чтение", "SQL")
+
+' Event streaming
+Rel(deviceService, messageQueue, "Device events", "Kafka Protocol")
+Rel(scenarioService, messageQueue, "Scenario events", "Kafka Protocol") 
+Rel(telemetryService, messageQueue, "Telemetry events", "Kafka Protocol")
+Rel(notificationService, messageQueue, "Consumes events", "Kafka Protocol")
+
+' Real-time коммуникация
+Rel(deviceService, realTimeQueue, "Real-time updates", "Redis Pub/Sub")
+Rel(notificationService, realTimeQueue, "Push notifications", "Redis Pub/Sub")
+Rel(apiGateway, realTimeQueue, "WebSocket updates", "Redis Pub/Sub")
+
+' Внешние интеграции
+Rel(integrationService, partnerApis, "Integration", "HTTP/MQTT")
+Rel(deviceService, integrationService, "Partner devices", "gRPC")
+
+@enduml 

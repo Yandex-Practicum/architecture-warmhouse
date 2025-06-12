@@ -1,0 +1,90 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Scenario Service - Components Diagram (TO BE)
+
+Person(user, "Пользователь", "Владелец умного дома")
+Container(webApp, "Web Application", "SPA", "Веб-интерфейс")
+Container(apiGateway, "API Gateway", "Nginx", "Единая точка входа")
+
+Container_Boundary(scenarioService, "Scenario Service") {
+    Component(scenarioController, "Scenario Controller", "Go/Node.js", "REST API для управления сценариями, CRUD операции")
+    Component(ruleController, "Rule Controller", "Go/Node.js", "REST API для управления правилами автоматизации")
+    Component(automationController, "Automation Controller", "Go/Node.js", "REST API для управления автоматическими действиями")
+    Component(schedulerController, "Scheduler Controller", "Go/Node.js", "REST API для управления расписаниями выполнения")
+    
+    Component(scenarioManager, "Scenario Manager", "Go/Node.js", "Основная логика управления пользовательскими сценариями")
+    Component(ruleEngine, "Rule Engine", "Go/Node.js", "Обработка правил, условий и логических операций")
+    Component(automationService, "Automation Service", "Go/Node.js", "Выполнение автоматических действий по сценариям")
+    Component(eventProcessor, "Event Processor", "Go/Node.js", "Обработка событий от устройств и триггеров")
+    Component(schedulerService, "Scheduler Service", "Go/Node.js", "Управление расписаниями и временными триггерами")
+    Component(validationService, "Validation Service", "Go/Node.js", "Валидация сценариев и правил")
+    
+    Component(scenarioRepository, "Scenario Repository", "Go/Node.js", "Доступ к данным сценариев в БД")
+    Component(ruleRepository, "Rule Repository", "Go/Node.js", "Доступ к данным правил и условий")
+    Component(automationRepository, "Automation Repository", "Go/Node.js", "История выполнения автоматических действий")
+    Component(scheduleRepository, "Schedule Repository", "Go/Node.js", "Доступ к данным расписаний и триггеров")
+}
+
+ContainerDb(scenarioDb, "Scenario Database", "PostgreSQL", "Сценарии автоматизации, правила")
+Container(messageQueue, "Message Queue", "Apache Kafka", "Event streaming")
+Container(realTimeQueue, "Real-time Queue", "Redis Pub/Sub", "Real-time уведомления")
+Container_Ext(deviceService, "Device Service", "Go/Node.js", "Управление устройствами")
+Container_Ext(notificationService, "Notification Service", "Go/Node.js", "Уведомления")
+
+' Внешние связи
+Rel(user, webApp, "Использует", "HTTPS")
+Rel(webApp, apiGateway, "API calls", "HTTPS")
+Rel(apiGateway, scenarioController, "Управление сценариями", "HTTP/gRPC")
+Rel(apiGateway, ruleController, "Управление правилами", "HTTP/gRPC")
+Rel(apiGateway, automationController, "Управление автоматизацией", "HTTP/gRPC")
+Rel(apiGateway, schedulerController, "Управление расписаниями", "HTTP/gRPC")
+
+' Внутренние связи контроллеров
+Rel(scenarioController, scenarioManager, "Основные операции", "")
+Rel(scenarioController, validationService, "Валидация сценариев", "")
+Rel(scenarioController, scenarioRepository, "CRUD операции", "")
+
+Rel(ruleController, ruleEngine, "Обработка правил", "")
+Rel(ruleController, validationService, "Валидация правил", "")
+Rel(ruleController, ruleRepository, "CRUD операции", "")
+
+Rel(automationController, automationService, "Управление автоматизацией", "")
+Rel(automationController, automationRepository, "История выполнения", "")
+
+Rel(schedulerController, schedulerService, "Управление расписаниями", "")
+Rel(schedulerController, scheduleRepository, "CRUD операции", "")
+
+' Связи сервисов
+Rel(scenarioManager, ruleEngine, "Применение правил", "")
+Rel(scenarioManager, automationService, "Запуск автоматизации", "")
+Rel(scenarioManager, eventProcessor, "Обработка событий", "")
+
+Rel(ruleEngine, eventProcessor, "Оценка условий", "")
+Rel(automationService, eventProcessor, "Триггеры действий", "")
+Rel(schedulerService, eventProcessor, "Временные события", "")
+
+Rel(eventProcessor, scenarioManager, "Активация сценариев", "")
+
+' Связи с базой данных
+Rel(scenarioRepository, scenarioDb, "Scenarios table", "SQL")
+Rel(ruleRepository, scenarioDb, "Rules table", "SQL")
+Rel(automationRepository, scenarioDb, "Automations table", "SQL")
+Rel(scheduleRepository, scenarioDb, "Schedules table", "SQL")
+
+' Event streaming
+Rel(scenarioManager, messageQueue, "События сценариев", "Kafka")
+Rel(ruleEngine, messageQueue, "События правил", "Kafka")
+Rel(automationService, messageQueue, "События автоматизации", "Kafka")
+Rel(eventProcessor, messageQueue, "События устройств", "Kafka")
+Rel(schedulerService, messageQueue, "События расписаний", "Kafka")
+
+' Real-time коммуникация
+Rel(scenarioManager, realTimeQueue, "Статусы сценариев", "Redis Pub/Sub")
+Rel(automationService, realTimeQueue, "Статусы автоматизации", "Redis Pub/Sub")
+
+' Связи с другими сервисами
+Rel(automationService, deviceService, "Команды устройствам", "gRPC")
+Rel(automationService, notificationService, "Отправка уведомлений", "gRPC")
+
+@enduml 

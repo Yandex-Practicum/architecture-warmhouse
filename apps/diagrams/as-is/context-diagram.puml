@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title Smart Home - Context Diagram (AS IS)
+
+Person(homeowner, "Пользователь умного дома", "Житель дома, управляет отоплением и мониторит температуру")
+Person(installer, "Специалист-установщик", "Технический специалист, выполняет установку и подключение системы отопления к датчикам")
+
+System(smartHomeMonolith, "Smart Home", "Система управления отоплением и мониторинга температуры")
+
+System_Ext(sensors, "Датчики", "Физические устройства, установленные в помещениях дома: датчики температуры и т.д.")
+System_Ext(heatingDevices, "Системы отопления", "Физические устройства отопления: котлы, радиаторы, термостаты")
+System_Ext(webBrowser, "Веб-браузер", "Фронтенд-интерфейс пользователя")
+System_Ext(installerWebBrowser, "Веб-браузер", "Фронтенд-интерфейс установщика")
+
+' Взаимодействие пользователя
+Rel(homeowner, webBrowser, "Использует веб-интерфейс")
+Rel(webBrowser, smartHomeMonolith, "HTTP запросы", "REST API")
+
+Rel(installer, installerWebBrowser, "Использует веб-интерфейс установщика для регистрации датчиков")
+Rel(installerWebBrowser, smartHomeMonolith, "HTTP запросы", "REST API")
+
+' Взаимодействие установщика
+Rel(installer, sensors, "Устанавливает и настраивает датчики", "Физическое подключение")
+Rel(installer, heatingDevices, "Подключает системы отопления", "Физическое подключение")
+
+' Взаимодействие системы с устройствами
+Rel(smartHomeMonolith, sensors, "Запрашивает данные о температуре", "API устройств")
+Rel(smartHomeMonolith, heatingDevices, "Управляет отоплением", "API устройств")
+
+@enduml

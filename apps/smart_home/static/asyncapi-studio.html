@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Home Platform - AsyncAPI Documentation (Studio)</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #fafafa;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+        
+        .nav-links {
+            background: white;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .nav-links a {
+            display: inline-block;
+            margin: 0 0.3rem;
+            padding: 0.4rem 0.8rem;
+            color: #667eea;
+            text-decoration: none;
+            border: 2px solid #667eea;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+            font-size: 0.85rem;
+        }
+        
+        .nav-links a:hover {
+            background: #667eea;
+            color: white;
+        }
+        
+        .nav-links a.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-radius: 4px;
+        }
+        
+        .asyncapi-wrapper {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .studio-iframe {
+            width: 100%;
+            height: 800px;
+            border: none;
+            border-radius: 8px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>⚡ Smart Home Platform - События (Studio)</h1>
+        <p>Документация асинхронных событий через AsyncAPI Studio</p>
+    </div>
+    
+    <div class="container">
+        <div class="asyncapi-wrapper" id="wrapper">
+            <div class="loading" id="loading">
+                🔄 Загрузка AsyncAPI Studio...
+            </div>
+            <iframe 
+                id="studio-iframe"
+                class="studio-iframe" 
+                style="display: none;"
+                title="AsyncAPI Studio"
+                allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone; midi; payment; usb"
+                sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-downloads">
+            </iframe>
+        </div>
+    </div>
+
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            const loading = document.getElementById('loading');
+            const iframe = document.getElementById('studio-iframe');
+            const wrapper = document.getElementById('wrapper');
+            
+            console.log('Загружаем AsyncAPI через Studio...');
+            
+            fetch('/api-docs/asyncapi.yaml')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    return response.text();
+                })
+                .then(yamlContent => {
+                    console.log('AsyncAPI файл загружен, размер:', yamlContent.length, 'символов');
+                    
+                    const encodedYaml = encodeURIComponent(yamlContent);
+                    const URL_LIMIT = 8192; // Устанавливаем более реалистичный лимит
+
+                    if (encodedYaml.length > URL_LIMIT) {
+                        console.warn(`Контент YAML (${encodedYaml.length} символов) слишком велик для URL. Отображаем альтернативный UI.`);
+                        loading.style.display = 'none';
+                        iframe.style.display = 'none';
+                        
+                        wrapper.innerHTML = `
+                            <div style="text-align: left; padding: 2rem; border: 1px solid #ddd; border-radius: 8px; background: #fff;">
+                                <h3>Спецификация слишком велика для встраивания</h3>
+                                <p style="margin-top: 0.5rem; color: #555;">Из-за ограничений на длину URL, эту спецификацию нельзя загрузить в iframe. Используйте следующий метод:</p>
+                                <ol style="margin-top: 1.5rem; margin-left: 1.5rem; line-height: 1.8;">
+                                    <li style="margin-bottom: 1rem;">
+                                        <strong>Шаг 1:</strong> Нажмите кнопку, чтобы скопировать YAML в буфер обмена.
+                                        <br/>
+                                        <button id="copy-btn" class="btn-action">Копировать YAML</button>
+                                    </li>
+                                    <li style="margin-bottom: 1rem;">
+                                        <strong>Шаг 2:</strong> Откройте AsyncAPI Studio в новой вкладке.
+                                        <br/>
+                                        <a href="https://studio.asyncapi.com/" target="_blank" class="btn-action btn-studio">Открыть AsyncAPI Studio</a>
+                                    </li>
+                                    <li>
+                                        <strong>Шаг 3:</strong> Вставьте скопированный код в редактор Studio.
+                                    </li>
+                                </ol>
+                                <hr style="margin: 2rem 0; border: none; border-top: 1px solid #eee;">
+                                <h4>Содержимое для ручного копирования:</h4>
+                                <pre style="background: #f8f9fa; border: 1px solid #e9ecef; padding: 1rem; border-radius: 4px; max-height: 250px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;">${yamlContent.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>
+                            </div>
+                        `;
+
+                        const style = document.createElement('style');
+                        style.innerHTML = `
+                            .btn-action { display: inline-block; font-weight: 600; color: white; padding: 0.8rem 1.5rem; text-decoration: none; border-radius: 6px; margin-top: 0.5rem; border: none; cursor: pointer; transition: all 0.2s ease; }
+                            .btn-action:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+                            .btn-studio { background: #667eea; }
+                            #copy-btn { background: #764ba2; }
+                        `;
+                        document.head.appendChild(style);
+
+                        document.getElementById('copy-btn').addEventListener('click', () => {
+                            navigator.clipboard.writeText(yamlContent).then(() => {
+                                const btn = document.getElementById('copy-btn');
+                                btn.textContent = 'Скопировано!';
+                                setTimeout(() => { btn.textContent = 'Копировать YAML'; }, 2000);
+                            }, (err) => {
+                                console.error('Ошибка копирования:', err);
+                                alert('Не удалось скопировать текст.');
+                            });
+                        });
+                        return;
+                    }
+
+                    const studioUrl = `https://studio.asyncapi.com/?url=data:text/yaml;charset=utf-8,${encodedYaml}`;
+                    iframe.src = studioUrl;
+                    
+                    iframe.onload = () => {
+                        loading.style.display = 'none';
+                        iframe.style.display = 'block';
+                        console.log('AsyncAPI Studio загружен успешно');
+                    };
+                    
+                    setTimeout(() => {
+                        if (loading.style.display !== 'none') {
+                            loading.innerHTML = '⚠️ Загрузка Studio занимает больше времени, чем обычно...<br/>' +
+                                             '<a href="' + studioUrl + '" target="_blank">Открыть в новой вкладке</a>, если не загрузится.';
+                        }
+                    }, 10000);
+                })
+                .catch(error => {
+                    console.error('Ошибка загрузки AsyncAPI файла:', error);
+                    loading.innerHTML = `Ошибка загрузки AsyncAPI файла: ${error.message}<br/>` +
+                                       '<a href="https://studio.asyncapi.com/" target="_blank">Попробуйте открыть AsyncAPI Studio напрямую</a>';
+                });
+        });
+    </script>
+</body>
+</html> 

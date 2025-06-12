@@ -1,0 +1,310 @@
+# Задание 3
+
+# ER диаграмма
+
+```puml
+
+@startuml
+!theme plain
+
+title Smart Home - Entity Relationship Diagram (TO BE)
+
+entity "users" as users {
+  * id : UUID <<PK>>
+  --
+  * email : VARCHAR(255) <<unique>>
+  * password_hash : VARCHAR(255)
+  * first_name : VARCHAR(100)
+  * last_name : VARCHAR(100)
+  * phone : VARCHAR(20)
+  * timezone : VARCHAR(50)
+  * created_at : TIMESTAMP
+  * updated_at : TIMESTAMP
+}
+
+entity "subscriptions" as subscriptions {
+  * id : UUID <<PK>>
+  * user_id : UUID <<FK>>
+  --
+  * plan_type : VARCHAR(50)
+  * status : VARCHAR(20)
+  * price : DECIMAL(10,2)
+  * billing_period : VARCHAR(20)
+  * created_at : TIMESTAMP
+  * expires_at : TIMESTAMP
+}
+
+entity "user_sessions" as sessions {
+  * id : UUID <<PK>>
+  * user_id : UUID <<FK>>
+  --
+  * token : VARCHAR(512)
+  * refresh_token : VARCHAR(512)
+  * expires_at : TIMESTAMP
+  * created_at : TIMESTAMP
+}
+
+entity "devices" as devices {
+  * id : UUID <<PK>>
+  * user_id : UUID <<FK>>
+  --
+  * name : VARCHAR(100)
+  * type : VARCHAR(50)
+  * model : VARCHAR(100)
+  * manufacturer : VARCHAR(100)
+  * serial_number : VARCHAR(100)
+  * mac_address : VARCHAR(18)
+  * status : VARCHAR(20)
+  * configuration : JSONB
+  * location : VARCHAR(100)
+  * created_at : TIMESTAMP
+  * updated_at : TIMESTAMP
+}
+
+entity "sensors" as sensors {
+  * id : UUID <<PK>>
+  * device_id : UUID <<FK>>
+  --
+  * type : VARCHAR(50)
+  * location : VARCHAR(100)
+  * unit : VARCHAR(20)
+  * min_value : DECIMAL(10,4)
+  * max_value : DECIMAL(10,4)
+  * calibration_data : JSONB
+  * is_active : BOOLEAN
+  * created_at : TIMESTAMP
+}
+
+entity "heating_systems" as heating_systems {
+  * id : UUID <<PK>>
+  * device_id : UUID <<FK>>
+  --
+  * type : VARCHAR(50)
+  * capacity : DECIMAL(10,2)
+  * power_consumption : DECIMAL(10,2)
+  * configuration : JSONB
+  * temperature_range_min : DECIMAL(5,2)
+  * temperature_range_max : DECIMAL(5,2)
+  * is_active : BOOLEAN
+  * created_at : TIMESTAMP
+}
+
+entity "device_commands" as commands {
+  * id : UUID <<PK>>
+  * device_id : UUID <<FK>>
+  * user_id : UUID <<FK>>
+  --
+  * command_type : VARCHAR(50)
+  * command_data : JSONB
+  * status : VARCHAR(20)
+  * result_data : JSONB
+  * error_message : TEXT
+  * created_at : TIMESTAMP
+  * executed_at : TIMESTAMP
+}
+
+entity "scenarios" as scenarios {
+  * id : UUID <<PK>>
+  * user_id : UUID <<FK>>
+  --
+  * name : VARCHAR(100)
+  * description : TEXT
+  * status : VARCHAR(20)
+  * is_active : BOOLEAN
+  * priority : INTEGER
+  * created_at : TIMESTAMP
+  * updated_at : TIMESTAMP
+}
+
+entity "scenario_rules" as rules {
+  * id : UUID <<PK>>
+  * scenario_id : UUID <<FK>>
+  --
+  * condition_type : VARCHAR(50)
+  * condition_data : JSONB
+  * action_type : VARCHAR(50)
+  * action_data : JSONB
+  * execution_order : INTEGER
+  * is_active : BOOLEAN
+}
+
+entity "scenario_automations" as automations {
+  * id : UUID <<PK>>
+  * scenario_id : UUID <<FK>>
+  * device_id : UUID <<FK>>
+  --
+  * execution_status : VARCHAR(20)
+  * executed_at : TIMESTAMP
+  * execution_duration : INTEGER
+  * result_data : JSONB
+  * error_message : TEXT
+}
+
+entity "scenario_schedules" as schedules {
+  * id : UUID <<PK>>
+  * scenario_id : UUID <<FK>>
+  --
+  * schedule_type : VARCHAR(50)
+  * cron_expression : VARCHAR(100)
+  * time_zone : VARCHAR(50)
+  * is_active : BOOLEAN
+  * next_execution : TIMESTAMP
+  * created_at : TIMESTAMP
+}
+
+entity "telemetry_data" as telemetry {
+  * id : UUID <<PK>>
+  * device_id : UUID <<FK>>
+  * sensor_id : UUID <<FK>>
+  --
+  * metric_type : VARCHAR(50)
+  * value : DECIMAL(15,6)
+  * unit : VARCHAR(20)
+  * quality : VARCHAR(20)
+  * timestamp : TIMESTAMP
+  * created_at : TIMESTAMP
+}
+
+entity "telemetry_metrics" as metrics {
+  * id : UUID <<PK>>
+  * device_id : UUID <<FK>>
+  --
+  * metric_type : VARCHAR(50)
+  * aggregated_value : DECIMAL(15,6)
+  * min_value : DECIMAL(15,6)
+  * max_value : DECIMAL(15,6)
+  * avg_value : DECIMAL(15,6)
+  * time_period : VARCHAR(20)
+  * period_start : TIMESTAMP
+  * period_end : TIMESTAMP
+  * created_at : TIMESTAMP
+}
+
+entity "telemetry_alerts" as alerts {
+  * id : UUID <<PK>>
+  * user_id : UUID <<FK>>
+  * device_id : UUID <<FK>>
+  --
+  * alert_type : VARCHAR(50)
+  * threshold_value : DECIMAL(15,6)
+  * comparison_operator : VARCHAR(10)
+  * message_template : TEXT
+  * is_active : BOOLEAN
+  * severity : VARCHAR(20)
+  * created_at : TIMESTAMP
+}
+
+entity "integrations" as integrations {
+  * id : UUID <<PK>>
+  * user_id : UUID <<FK>>
+  --
+  * provider_name : VARCHAR(100)
+  * provider_type : VARCHAR(50)
+  * configuration : JSONB
+  * credentials : JSONB
+  * status : VARCHAR(20)
+  * last_sync_at : TIMESTAMP
+  * created_at : TIMESTAMP
+}
+
+entity "integration_connectors" as connectors {
+  * id : UUID <<PK>>
+  * integration_id : UUID <<FK>>
+  --
+  * connector_type : VARCHAR(50)
+  * endpoint_url : VARCHAR(500)
+  * protocol : VARCHAR(20)
+  * credentials : JSONB
+  * polling_interval : INTEGER
+  * is_active : BOOLEAN
+  * created_at : TIMESTAMP
+}
+
+entity "sync_history" as sync_history {
+  * id : UUID <<PK>>
+  * integration_id : UUID <<FK>>
+  --
+  * sync_type : VARCHAR(50)
+  * sync_status : VARCHAR(20)
+  * data_count : INTEGER
+  * error_count : INTEGER
+  * error_message : TEXT
+  * started_at : TIMESTAMP
+  * completed_at : TIMESTAMP
+}
+
+entity "notifications" as notifications {
+  * id : UUID <<PK>>
+  * user_id : UUID <<FK>>
+  * template_id : UUID <<FK>>
+  --
+  * notification_type : VARCHAR(50)
+  * channel : VARCHAR(20)
+  * recipient : VARCHAR(255)
+  * subject : VARCHAR(255)
+  * content : TEXT
+  * status : VARCHAR(20)
+  * sent_at : TIMESTAMP
+  * delivered_at : TIMESTAMP
+  * created_at : TIMESTAMP
+}
+
+entity "notification_templates" as templates {
+  * id : UUID <<PK>>
+  --
+  * template_name : VARCHAR(100)
+  * template_type : VARCHAR(50)
+  * channel : VARCHAR(20)
+  * subject : VARCHAR(255)
+  * content : TEXT
+  * variables : JSONB
+  * is_active : BOOLEAN
+  * created_at : TIMESTAMP
+  * updated_at : TIMESTAMP
+}
+
+entity "notification_subscriptions" as notification_subscriptions {
+  * id : UUID <<PK>>
+  * user_id : UUID <<FK>>
+  --
+  * notification_type : VARCHAR(50)
+  * channel : VARCHAR(20)
+  * is_active : BOOLEAN
+  * preferences : JSONB
+  * created_at : TIMESTAMP
+  * updated_at : TIMESTAMP
+}
+
+' Relationships
+users ||--o{ subscriptions : "has"
+users ||--o{ sessions : "has"
+users ||--o{ devices : "owns"
+users ||--o{ commands : "executes"
+users ||--o{ scenarios : "creates"
+users ||--o{ alerts : "configures"
+users ||--o{ integrations : "configures"
+users ||--o{ notifications : "receives"
+users ||--o{ notification_subscriptions : "subscribes"
+
+devices ||--o{ sensors : "contains"
+devices ||--o{ heating_systems : "contains"
+devices ||--o{ commands : "receives"
+devices ||--o{ automations : "executes"
+devices ||--o{ telemetry : "generates"
+devices ||--o{ metrics : "aggregates"
+devices ||--o{ alerts : "triggers"
+
+sensors ||--o{ telemetry : "measures"
+
+scenarios ||--o{ rules : "contains"
+scenarios ||--o{ automations : "executes"
+scenarios ||--o{ schedules : "scheduled"
+
+integrations ||--o{ connectors : "uses"
+integrations ||--o{ sync_history : "tracks"
+
+templates ||--o{ notifications : "generates"
+
+@enduml
+
+```
